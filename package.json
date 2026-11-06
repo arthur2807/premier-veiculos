@@ -1,0 +1,15 @@
+{
+  "name": "premier-veiculos",
+  "version": "1.0.0",
+  "description": "Site e painel de estoque da Premier Veículos",
+  "main": "src/server.js",
+  "private": true,
+  "scripts": {
+    "start": "node --no-warnings src/server.js",
+    "dev": "node --no-warnings --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "license": "UNLICENSED"
+}

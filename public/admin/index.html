@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Painel da loja</title>
+<link rel="icon" href="/static/img/favicon.png">
+<link rel="stylesheet" href="/static/admin/admin.css?v=5">
+<link rel="stylesheet" href="/static/css/report.css?v=2">
+<link rel="stylesheet" href="/theme.css?v=1">
+</head>
+<body>
+<div id="login" class="login" hidden>
+  <form class="login-card" id="login-form">
+    <img src="/static/img/logo-400.png" alt="Logo da loja" width="200">
+    <h1>Painel da loja</h1>
+    <label>Usuário<input name="username" autocomplete="username" autocapitalize="none" placeholder="admin" value="admin"></label>
+    <label>Senha<input type="password" name="password" autocomplete="current-password" required autofocus></label>
+    <button class="btn primary" type="submit">Entrar</button>
+    <p class="err" id="login-err" hidden></p>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="bar">
+    <img src="/static/img/logo-400.png" alt="Logo da loja" height="36">
+    <nav class="tabs" role="tablist">
+      <button data-tab="estoque" class="on">Estoque</button>
+      <button data-tab="contatos">Contatos <span class="dot" id="leads-dot" hidden></span></button>
+      <button data-tab="relatorios">Relatórios</button>
+      <button data-tab="lojas" class="mgr">Lojas</button>
+      <button data-tab="usuarios" class="mgr">Usuários</button>
+      <button data-tab="config" class="mgr">Configurações</button>
+    </nav>
+    <div class="bar-right"><span class="who" id="who"></span><a href="/" target="_blank">Ver site ↗</a><button id="logout" class="link">Sair</button></div>
+  </header>
+  <div id="warn" class="warn" hidden></div>
+
+  <section data-panel="estoque" class="panel">
+    <div class="stats" id="stats"></div>
+    <div class="toolbar">
+      <input type="search" id="vsearch" placeholder="Buscar por marca, modelo, anúncio…">
+      <select id="vfilter"><option value="">Todos</option><option value="disponivel">Disponíveis</option><option value="reservado">Reservados</option><option value="vendido">Vendidos</option></select>
+      <button class="btn primary" id="new-vehicle">+ Cadastrar veículo</button>
+    </div>
+    <div id="demo-box"></div>
+    <div class="vlist" id="vlist"></div>
+  </section>
+
+  <section data-panel="contatos" class="panel" hidden>
+    <h2>Pedidos de avaliação e contatos</h2>
+    <div id="leads"></div>
+  </section>
+
+  <section data-panel="relatorios" class="panel" hidden>
+    <h2>Relatórios do site</h2>
+    <p class="hint">Visitas contadas sem cookies e sem identificar ninguém. Acessos da equipe logada no painel não entram na conta.</p>
+    <div class="rp-period" id="rp-period"><button data-d="7">7 dias</button><button data-d="30" class="on">30 dias</button><button data-d="90">90 dias</button><button data-d="365">12 meses</button></div>
+    <div id="report"><p class="hint">Carregando…</p></div>
+  </section>
+
+  <section data-panel="usuarios" class="panel" hidden>
+    <h2>Usuários do painel</h2>
+    <p class="hint">Crie um acesso para cada vendedor. <b>Vendedor</b> cadastra carros e atende contatos. <b>Gerente</b> também altera lojas, configurações, usuários e baixa backup. O acesso principal "admin" usa a senha definida no servidor.</p>
+    <form id="user-form" class="card form inline-form">
+      <label>Nome<input name="name" required></label>
+      <label>Usuário (para entrar)<input name="username" required autocapitalize="none" pattern="[a-zA-Z0-9._-]{3,}" placeholder="ex.: joao"></label>
+      <label>Senha inicial<input name="password" required minlength="6" type="text" autocomplete="off"></label>
+      <label>Função<select name="role"><option value="vendedor">Vendedor</option><option value="gerente">Gerente</option></select></label>
+      <button class="btn primary" type="submit">Criar acesso</button>
+    </form>
+    <div id="users" class="vlist" style="margin-top:14px"></div>
+  </section>
+
+  <section data-panel="lojas" class="panel" hidden>
+    <h2>Lojas</h2>
+    <p class="hint">O WhatsApp deve ter código do país e DDD, só números. Ex.: 5585999998888</p>
+    <div id="units" class="units"></div>
+    <button class="btn" id="add-unit" type="button" style="margin-top:14px">+ Adicionar loja</button>
+  </section>
+
+  <section data-panel="config" class="panel" hidden>
+    <h2>Configurações do site</h2>
+    <form id="settings" class="form card">
+      <label>Texto "Sobre a loja" (rodapé)<textarea name="about" rows="3"></textarea></label>
+      <label>Instagram (link)<input name="instagram"></label>
+      <label>Facebook (link)<input name="facebook"></label>
+      <label>E-mail<input name="email" type="email"></label>
+      <label>Taxa de referência do simulador (% ao mês)<input name="finance_rate" inputmode="decimal"></label>
+      <label>Endereço do site (para Google e redes sociais)<input name="site_url" placeholder="https://www.sualoja.com.br"></label>
+      <label>ID do Google Analytics (opcional)<input name="ga_id" placeholder="G-XXXXXXXXXX" autocapitalize="characters"></label>
+      <label class="check"><input type="checkbox" name="watermark"> Colocar a logo da loja (marca d'água) nas fotos novas</label>
+      <button class="btn primary" type="submit">Salvar</button>
+    </form>
+    <div class="card form" style="margin-top:16px">
+      <h3 style="margin-top:0">Backup</h3>
+      <p class="hint">Baixa um arquivo com o banco de dados (carros, contatos, lojas, usuários) e todas as fotos. Guarde no computador ou no Google Drive. Recomendado uma vez por semana.</p>
+      <a class="btn" href="/api/admin/backup" id="backup-btn">⬇ Baixar backup agora</a>
+    </div>
+  </section>
+</div>
+
+<dialog id="editor">
+  <form id="vform" method="dialog" class="vform">
+    <header><h2 id="vform-title">Veículo</h2><button type="button" class="x" data-close aria-label="Fechar">×</button></header>
+    <div class="vform-body">
+      <h3>Fotos</h3>
+      <p class="hint">A primeira foto é a capa. Use "Definir capa" para trocar, ou arraste e use as setas para reordenar. As fotos são reduzidas automaticamente.</p>
+      <div class="photos" id="photos"></div>
+      <label class="upload btn">+ Adicionar fotos<input type="file" id="photo-input" accept="image/*" multiple hidden></label>
+      <p class="hint" id="upload-status"></p>
+
+      <h3>Dados principais</h3>
+      <div class="g3">
+        <label>Marca*<input name="brand" required list="brands"></label>
+        <label>Modelo*<input name="model" required></label>
+        <label>Versão<input name="version" placeholder="Ex.: XEi 2.0 Flex"></label>
+        <label>Ano fabricação<input name="year_fab" inputmode="numeric"></label>
+        <label>Ano modelo<input name="year_model" inputmode="numeric"></label>
+        <label>Quilometragem<input name="km" inputmode="numeric"></label>
+        <label>Preço (R$)<input name="price" inputmode="numeric" placeholder="139900"></label>
+        <label>Preço anterior "de" (opcional)<input name="price_old" inputmode="numeric"></label>
+        <label>Condição<select name="condition"><option value="seminovo">Seminovo</option><option value="0km">0 km</option></select></label>
+        <label>Câmbio<select name="transmission"><option>Automático</option><option>Manual</option><option>CVT</option><option>Automatizado</option></select></label>
+        <label>Combustível<select name="fuel"><option>Flex</option><option>Gasolina</option><option>Diesel</option><option>Elétrico</option><option>Híbrido</option></select></label>
+        <label>Carroceria<select name="body"><option>Hatch</option><option>Sedã</option><option>SUV</option><option>Picape</option><option>Minivan</option><option>Utilitário</option><option>Cupê</option><option>Moto</option></select></label>
+        <label>Cor<input name="color" list="colors"></label>
+        <label>Portas<input name="doors" inputmode="numeric"></label>
+        <label>Final da placa<input name="plate_end" maxlength="1"></label>
+        <label>Loja<select name="unit_id" id="unit-select"></select></label>
+        <label>Situação<select name="status"><option value="disponivel">Disponível</option><option value="reservado">Reservado</option><option value="vendido">Vendido</option></select></label>
+        <label class="check"><input type="checkbox" name="featured"> Mostrar nos destaques</label>
+      </div>
+      <h3>Opcionais</h3>
+      <label>Um por linha<textarea name="options" rows="5" placeholder="Ar-condicionado&#10;Câmera de ré&#10;Central multimídia"></textarea></label>
+      <h3>Descrição</h3>
+      <label>Texto do anúncio<textarea name="description" rows="4"></textarea></label>
+    </div>
+    <footer>
+      <button type="button" class="btn danger" id="vdelete">Excluir</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-close>Cancelar</button>
+      <button type="submit" class="btn primary" id="vsave">Salvar veículo</button>
+    </footer>
+  </form>
+</dialog>
+<datalist id="brands"><option>Chevrolet</option><option>Fiat</option><option>Volkswagen</option><option>Toyota</option><option>Hyundai</option><option>Jeep</option><option>Honda</option><option>Renault</option><option>Nissan</option><option>Ford</option><option>BYD</option><option>Peugeot</option><option>Citroën</option><option>Mitsubishi</option><option>Caoa Chery</option><option>BMW</option><option>Mercedes-Benz</option><option>Audi</option><option>Kia</option><option>GWM</option></datalist>
+<datalist id="colors"><option>Branco</option><option>Preto</option><option>Prata</option><option>Cinza</option><option>Vermelho</option><option>Azul</option><option>Verde</option><option>Marrom</option><option>Bege</option><option>Amarelo</option><option>Laranja</option></datalist>
+<div id="toast" class="toast" hidden></div>
+<dialog id="matches-dlg" class="small-dlg"><div class="vform"><header><h2>Clientes esperando este carro</h2><button type="button" class="x" data-close aria-label="Fechar">×</button></header><div class="vform-body" id="matches-body"></div><footer><span class="spacer"></span><button type="button" class="btn primary" data-close>Fechar</button></footer></div></dialog>
+<script src="/static/js/report.js?v=2"></script>
+<script src="/static/admin/admin.js?v=5"></script>
+</body>
+</html>
