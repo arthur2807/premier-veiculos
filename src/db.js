@@ -140,6 +140,8 @@ seed();
 
 // Colunas novas em bancos antigos
 try { db.exec("ALTER TABLE units ADD COLUMN hours_json TEXT DEFAULT ''"); } catch {}
+try { db.exec('ALTER TABLE vehicles ADD COLUMN shares INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE vehicles ADD COLUMN calls INTEGER DEFAULT 0'); } catch {}
 
 // Horário estruturado: [{open:'08:00', close:'18:00'} | null] de segunda (0) a domingo (6)
 const DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];

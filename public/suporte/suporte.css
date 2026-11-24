@@ -45,3 +45,49 @@ section{margin-bottom:20px}
   .checks{grid-template-columns:1fr}
 }
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.period-head{position:sticky;top:49px;z-index:4;background:#f1f3f7;padding:8px 0;margin-bottom:8px}
+.period-head h2{margin:0}
+.kpis6{grid-template-columns:repeat(6,1fr)}
+.funnel{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.funnel li{display:grid;grid-template-columns:190px 1fr 110px;gap:10px;align-items:center;font-size:14px}
+.funnel .rp-track{height:14px}
+.funnel b{text-align:right}
+.mini{width:100%;border-collapse:collapse;font-size:14px}
+.mini th,.mini td{padding:7px 8px;border-bottom:1px solid #eef1f6;text-align:left;white-space:nowrap}
+.mini th{font-size:12px;color:#5b6880;text-transform:uppercase;letter-spacing:.02em}
+.mini .r{text-align:right}
+@media (max-width:1000px){.kpis6{grid-template-columns:repeat(2,1fr)}.funnel li{grid-template-columns:120px 1fr 80px}}
+#users-box .sec-head{align-items:baseline}
+.uform{display:grid;grid-template-columns:1.2fr 1fr 1fr .9fr auto;gap:10px;align-items:end;margin:6px 0 10px}
+.uform select,.role-pick{font:inherit;font-size:15px;border:1.5px solid #dfe3ea;border-radius:9px;padding:9px 10px;background:#fff}
+.uform button[type=submit]{padding:11px 16px;white-space:nowrap}
+.ok-msg{color:#126c39;font-weight:600}
+.users-t td{vertical-align:middle}
+.users-t tr.off td{color:#7b879c}
+.users-t .acts{display:flex;gap:6px;justify-content:flex-end}
+.users-t .role-pick{font-size:14px;padding:5px 8px}
+button.sm{font:600 13px system-ui,sans-serif;padding:6px 10px;border-radius:8px;border:1.5px solid #dfe3ea;background:#fff;color:#1d2433;cursor:pointer}
+button.sm.danger{color:#b4281f;border-color:#f2c4c0}
+@media (max-width:900px){.uform{grid-template-columns:1fr}}
+/* caixa de nova senha */
+.pw-dialog{border:0;border-radius:14px;padding:22px;width:min(420px,94vw);box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.pw-dialog::backdrop{background:rgba(10,20,40,.55)}
+.pw-dialog form{display:grid;gap:14px}
+.pw-dialog h3{margin:0;font-size:17px}
+.pw-actions{display:flex;gap:8px;justify-content:flex-end}
+.pw-actions .btn{font:600 14px system-ui,sans-serif;padding:10px 14px;border-radius:9px;border:1.5px solid #dfe3ea;background:#fff;color:#1d2433;cursor:pointer}
+.pw-actions .btn.primary{background:#1d2433;color:#fff;border-color:#1d2433}
+button[type=submit]:disabled{opacity:.6;cursor:wait}
+/* cobrança */
+.billing-box{margin-bottom:20px}
+.bform{display:grid;gap:12px;margin-top:6px}
+.bstatus{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.bstatus label{display:grid;grid-template-columns:auto 1fr;column-gap:8px;align-items:start;border:1.5px solid #dfe3ea;border-radius:10px;padding:10px 12px;cursor:pointer;font-size:14px;color:#1d2433;font-weight:400}
+.bstatus label small{grid-column:2;color:#5b6880;font-size:12.5px}
+.bstatus label:has(input:checked){border-color:#1d2433;background:#f6f7fa}
+.bform textarea{font:inherit;font-size:15px;border:1.5px solid #dfe3ea;border-radius:9px;padding:10px 12px;resize:vertical}
+.bform textarea:disabled{background:#f4f6fa}
+.bform input[type=date]{max-width:220px}
+.bform .check{display:flex;gap:8px;align-items:center;font-weight:400;color:#1d2433;font-size:14px}
+.bactions{display:flex;gap:12px;align-items:center}
+@media (max-width:900px){.bstatus{grid-template-columns:1fr}}

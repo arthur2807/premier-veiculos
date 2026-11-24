@@ -123,3 +123,50 @@ dialog::backdrop{background:rgba(10,20,40,.55)}
 .s-closed{font-size:12px;color:var(--muted)}
 .sched-tools{margin-top:4px}
 .sched-preview{margin:4px 0 0}
+
+/* desempenho dos anúncios */
+.rp-kpis.dp-kpis{grid-template-columns:repeat(5,1fr)}
+.dp-insights{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:6px}
+.dp-insights li{background:#fff;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:8px;padding:9px 12px;font-size:14px}
+.dp-insights li.warn{border-left-color:#d49a12;background:#fffbf1}
+.dp-tools{margin-top:4px}
+.dp-wrap{background:#fff;border:1px solid var(--line);border-radius:12px}
+.dp-table th{position:sticky;top:0;background:#f7f9fc;z-index:1}
+.dp-table th button.sort{all:unset;cursor:pointer;font-weight:700;color:var(--navy);font-size:13px}
+.dp-table th button.sort:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.dp-table .r{text-align:right}
+.dp-table .c{text-align:center}
+.dp-row{cursor:pointer}
+.dp-row:hover td,.dp-row:focus td{background:#f5f8fd}
+.dp-row:focus{outline:none}
+.dp-car{display:flex;align-items:center;gap:10px;min-width:220px}
+.dp-car img{width:64px;height:44px;object-fit:cover;border-radius:6px;background:var(--bg);flex:none}
+.dp-car span{display:grid;white-space:normal}
+.dp-car small{color:var(--muted);font-size:12px}
+.dp-bar{display:inline-block;width:46px;height:6px;background:#eef1f6;border-radius:3px;margin-right:8px;vertical-align:middle;overflow:hidden}
+.dp-bar i{display:block;height:100%;background:var(--blue)}
+.dp-table tfoot td{font-weight:700;background:#f7f9fc;border-top:2px solid var(--line)}
+.vstats{width:min(980px,96vw)}
+.vstats .rp-kpi b{font-size:24px}
+/* perfis */
+.roles-card{padding:12px 16px;margin-bottom:14px}
+.roles-card summary{cursor:pointer;font-weight:700;color:var(--navy)}
+.rp-table.roles td.c,.rp-table.roles th.c{text-align:center}
+.rp-table.roles .yes{color:#137a3d;font-weight:800}
+.rp-table.roles .no{color:#b9c2d0}
+.role-desc{margin:12px 0 0;padding-left:18px;font-size:14px;color:#3a4660;display:grid;gap:4px}
+.role-pick{width:auto;font-size:14px;padding:6px 8px}
+.tag.role-gerente{background:var(--navy);color:#fff}.tag.role-marketing{background:#e8effd;color:var(--blue)}.tag.role-atendimento{background:#e7f6ee;color:#137a3d}
+@media (max-width:1000px){.rp-kpis.dp-kpis{grid-template-columns:repeat(2,1fr)}}
+/* caixa de nova senha */
+.pw-dialog{width:min(420px,94vw);padding:20px}
+.pw-dialog form{display:grid;gap:14px}
+.pw-dialog h3{margin:0}
+.pw-actions{display:flex;gap:8px;justify-content:flex-end}
+/* cobrança: aviso e suspensão */
+.billwarn{background:#fdecea;color:#8a1f17;border-bottom-color:#f4c7c2;font-weight:600}
+.suspended{display:grid;place-items:center;padding:48px 20px}
+.suspended-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:28px;max-width:520px;width:100%;display:grid;gap:12px;text-align:center}
+.suspended-card h2{margin:0;color:#8a1f17}
+.suspended-card p{margin:0}
+.suspended-card .btn{justify-self:center}

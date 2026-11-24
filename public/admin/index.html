@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <title>Painel da loja</title>
 <link rel="icon" href="/static/img/favicon.png">
-<link rel="stylesheet" href="/static/admin/admin.css?v=5">
+<link rel="stylesheet" href="/static/admin/admin.css?v=8">
 <link rel="stylesheet" href="/static/css/report.css?v=2">
 <link rel="stylesheet" href="/theme.css?v=1">
 </head>
@@ -15,8 +15,8 @@
   <form class="login-card" id="login-form">
     <img src="/static/img/logo-400.png" alt="Logo da loja" width="200">
     <h1>Painel da loja</h1>
-    <label>Usuário<input name="username" autocomplete="username" autocapitalize="none" placeholder="admin" value="admin"></label>
-    <label>Senha<input type="password" name="password" autocomplete="current-password" required autofocus></label>
+    <label>Usuário<input name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus></label>
+    <label>Senha<input type="password" name="password" autocomplete="current-password" required autocapitalize="none" autocorrect="off" spellcheck="false"></label>
     <button class="btn primary" type="submit">Entrar</button>
     <p class="err" id="login-err" hidden></p>
   </form>
@@ -26,26 +26,43 @@
   <header class="bar">
     <img src="/static/img/logo-400.png" alt="Logo da loja" height="36">
     <nav class="tabs" role="tablist">
-      <button data-tab="estoque" class="on">Estoque</button>
-      <button data-tab="contatos">Contatos <span class="dot" id="leads-dot" hidden></span></button>
-      <button data-tab="relatorios">Relatórios</button>
-      <button data-tab="lojas" class="mgr">Lojas</button>
-      <button data-tab="usuarios" class="mgr">Usuários</button>
-      <button data-tab="config" class="mgr">Configurações</button>
+      <button data-tab="estoque" data-perm="estoque" class="on">Estoque</button>
+      <button data-tab="desempenho" data-perm="desempenho">Desempenho</button>
+      <button data-tab="contatos" data-perm="contatos">Contatos <span class="dot" id="leads-dot" hidden></span></button>
+      <button data-tab="relatorios" data-perm="relatorios">Relatórios</button>
+      <button data-tab="lojas" data-perm="lojas">Lojas</button>
+      <button data-tab="usuarios" data-perm="usuarios">Usuários</button>
+      <button data-tab="config" data-perm="config">Configurações</button>
     </nav>
     <div class="bar-right"><span class="who" id="who"></span><a href="/" target="_blank">Ver site ↗</a><button id="logout" class="link">Sair</button></div>
   </header>
   <div id="warn" class="warn" hidden></div>
+  <div id="billwarn" class="warn billwarn" role="alert" hidden></div>
+  <section id="suspended" class="suspended" hidden>
+    <div class="suspended-card">
+      <h2>Painel suspenso</h2>
+      <p id="suspended-text"></p>
+      <p class="hint">Seus carros, fotos e contatos continuam guardados. Assim que a situação for regularizada, tudo volta como estava.</p>
+      <a class="btn" href="/api/admin/backup" id="suspended-backup" hidden>⬇ Baixar backup dos dados</a>
+    </div>
+  </section>
 
   <section data-panel="estoque" class="panel">
     <div class="stats" id="stats"></div>
     <div class="toolbar">
       <input type="search" id="vsearch" placeholder="Buscar por marca, modelo, anúncio…">
       <select id="vfilter"><option value="">Todos</option><option value="disponivel">Disponíveis</option><option value="reservado">Reservados</option><option value="vendido">Vendidos</option></select>
-      <button class="btn primary" id="new-vehicle">+ Cadastrar veículo</button>
+      <button class="btn primary" id="new-vehicle" data-perm="estoque_editar">+ Cadastrar veículo</button>
     </div>
     <div id="demo-box"></div>
     <div class="vlist" id="vlist"></div>
+  </section>
+
+  <section data-panel="desempenho" class="panel" hidden>
+    <h2>Desempenho dos anúncios</h2>
+    <p class="hint">Quantas vezes cada carro foi visto, por quantas pessoas, quantas vezes foi compartilhado e quantos contatos gerou (WhatsApp, ligação e formulário). Contado sem cookies; acessos da equipe logada não entram. Clique num carro para ver o detalhe.</p>
+    <div class="rp-period" id="dp-period"><button data-d="7">7 dias</button><button data-d="30" class="on">30 dias</button><button data-d="90">90 dias</button><button data-d="365">12 meses</button></div>
+    <div id="dp"><p class="hint">Carregando…</p></div>
   </section>
 
   <section data-panel="contatos" class="panel" hidden>
@@ -62,12 +79,13 @@
 
   <section data-panel="usuarios" class="panel" hidden>
     <h2>Usuários do painel</h2>
-    <p class="hint">Crie um acesso para cada vendedor. <b>Vendedor</b> cadastra carros e atende contatos. <b>Gerente</b> também altera lojas, configurações, usuários e baixa backup. O acesso principal "admin" usa a senha definida no servidor.</p>
+    <p class="hint">Crie um acesso para cada pessoa da equipe e escolha o perfil. Cada perfil só vê e altera o que a tabela abaixo mostra. O acesso principal é gerente e tem usuário e senha definidos no servidor (variáveis ADMIN_USER e ADMIN_PASSWORD).</p>
+    <details class="card roles-card" id="roles-card"><summary>O que cada perfil pode fazer</summary><div class="rp-tablewrap" id="roles-table"></div></details>
     <form id="user-form" class="card form inline-form">
       <label>Nome<input name="name" required></label>
       <label>Usuário (para entrar)<input name="username" required autocapitalize="none" pattern="[a-zA-Z0-9._-]{3,}" placeholder="ex.: joao"></label>
-      <label>Senha inicial<input name="password" required minlength="6" type="text" autocomplete="off"></label>
-      <label>Função<select name="role"><option value="vendedor">Vendedor</option><option value="gerente">Gerente</option></select></label>
+      <label>Senha inicial<input name="password" required minlength="6" type="text" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+      <label>Perfil<select name="role" id="role-select"><option value="vendedor">Vendedor</option><option value="gerente">Gerente</option></select></label>
       <button class="btn primary" type="submit">Criar acesso</button>
     </form>
     <div id="users" class="vlist" style="margin-top:14px"></div>
@@ -97,6 +115,12 @@
       <h3 style="margin-top:0">Backup</h3>
       <p class="hint">Baixa um arquivo com o banco de dados (carros, contatos, lojas, usuários) e todas as fotos. Guarde no computador ou no Google Drive. Recomendado uma vez por semana.</p>
       <a class="btn" href="/api/admin/backup" id="backup-btn">⬇ Baixar backup agora</a>
+    </div>
+    <div class="card form" style="margin-top:16px">
+      <h3 style="margin-top:0">Fotos leves no estoque</h3>
+      <p class="hint">As fotos novas já ganham uma versão reduzida para a listagem carregar rápido no celular. Clique aqui uma vez para gerar essa versão das fotos que foram cadastradas antes.</p>
+      <button class="btn" type="button" id="thumbs-btn">Gerar miniaturas das fotos antigas</button>
+      <p class="hint" id="thumbs-status" aria-live="polite"></p>
     </div>
   </section>
 </div>
@@ -145,11 +169,24 @@
     </footer>
   </form>
 </dialog>
+<dialog id="vstats" class="vstats">
+  <div class="vform">
+    <header><h2 id="vs-title">Desempenho</h2><button type="button" class="x" data-close aria-label="Fechar">×</button></header>
+    <div class="vform-body" id="vs-body"></div>
+  </div>
+</dialog>
+<dialog id="pw-dialog" class="pw-dialog">
+  <form method="dialog" id="pw-form">
+    <h3 id="pw-title">Nova senha</h3>
+    <label>Nova senha (mínimo 6 caracteres)<input name="pw" type="text" minlength="6" required autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+    <div class="pw-actions"><button type="button" class="btn" value="cancel" id="pw-cancel">Cancelar</button><button type="submit" class="btn primary" value="ok">Salvar senha</button></div>
+  </form>
+</dialog>
 <datalist id="brands"><option>Chevrolet</option><option>Fiat</option><option>Volkswagen</option><option>Toyota</option><option>Hyundai</option><option>Jeep</option><option>Honda</option><option>Renault</option><option>Nissan</option><option>Ford</option><option>BYD</option><option>Peugeot</option><option>Citroën</option><option>Mitsubishi</option><option>Caoa Chery</option><option>BMW</option><option>Mercedes-Benz</option><option>Audi</option><option>Kia</option><option>GWM</option></datalist>
 <datalist id="colors"><option>Branco</option><option>Preto</option><option>Prata</option><option>Cinza</option><option>Vermelho</option><option>Azul</option><option>Verde</option><option>Marrom</option><option>Bege</option><option>Amarelo</option><option>Laranja</option></datalist>
 <div id="toast" class="toast" hidden></div>
 <dialog id="matches-dlg" class="small-dlg"><div class="vform"><header><h2>Clientes esperando este carro</h2><button type="button" class="x" data-close aria-label="Fechar">×</button></header><div class="vform-body" id="matches-body"></div><footer><span class="spacer"></span><button type="button" class="btn primary" data-close>Fechar</button></footer></div></dialog>
-<script src="/static/js/report.js?v=2"></script>
-<script src="/static/admin/admin.js?v=5"></script>
+<script src="/static/js/report.js?v=3"></script>
+<script src="/static/admin/admin.js?v=10"></script>
 </body>
 </html>

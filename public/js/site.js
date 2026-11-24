@@ -26,12 +26,46 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') sheet.hidden = true; });
   }
 
-  // estatística: cliques em qualquer link de WhatsApp
+  // estatística: cliques no WhatsApp, ligações e compartilhamentos (sem cookies)
+  const pageVehicle = () => (location.pathname.match(/^\/veiculo\/(\d+)/) || [])[1] || '';
+  const beacon = (t, v, c) => { try { navigator.sendBeacon('/api/evt', new Blob([JSON.stringify({ t, v, c })], { type: 'application/json' })); } catch (_) {} };
   document.addEventListener('click', (e) => {
-    const a = e.target.closest('a[href*="wa.me/"]'); if (!a) return;
-    const v = a.dataset.id || (document.querySelector('.sim') ? (location.pathname.match(/\/veiculo\/(\d+)/) || [])[1] : '') || '';
-    try { navigator.sendBeacon('/api/evt', new Blob([JSON.stringify({ t: 'wa', v })], { type: 'application/json' })); } catch (_) {}
+    const a = e.target.closest('a[href]'); if (!a || a.dataset.share) return;
+    if (a.href.includes('wa.me/')) beacon('wa', a.dataset.id || (document.querySelector('.sim') ? pageVehicle() : ''));
+    else if (a.href.startsWith('tel:')) beacon('call', a.dataset.id || pageVehicle());
   });
+
+  // compartilhar anúncio
+  const shareSheet = $('#share-sheet');
+  const shareUrl = (ch) => location.origin + location.pathname + '?utm_source=compartilhado&utm_medium=' + ch;
+  $$('.js-share').forEach((b) => b.addEventListener('click', async () => {
+    const v = b.dataset.id, text = b.dataset.title + (b.dataset.price ? ' por ' + b.dataset.price : '');
+    if (navigator.share && matchMedia('(pointer:coarse)').matches) {
+      try { await navigator.share({ title: b.dataset.title, text, url: shareUrl('nativo') }); beacon('share', v, 'nativo'); } catch (_) { /* cancelado */ }
+      return;
+    }
+    if (!shareSheet) return;
+    $('[data-share="whatsapp"]', shareSheet).href = 'https://wa.me/?text=' + encodeURIComponent(text + ' ' + shareUrl('whatsapp'));
+    $('[data-share="facebook"]', shareSheet).href = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(shareUrl('facebook'));
+    $('.js-copy-label', shareSheet).textContent = 'Copiar link';
+    shareSheet.dataset.v = v; shareSheet.hidden = false; $('.wa-unit', shareSheet).focus();
+  }));
+  if (shareSheet) {
+    shareSheet.addEventListener('click', async (e) => {
+      const opt = e.target.closest('[data-share]');
+      if (opt) {
+        beacon('share', shareSheet.dataset.v, opt.dataset.share);
+        if (opt.dataset.share === 'copiar') {
+          e.preventDefault();
+          try { await navigator.clipboard.writeText(shareUrl('copiar')); $('.js-copy-label', shareSheet).textContent = 'Link copiado!'; } catch (_) { prompt('Copie o link:', shareUrl('copiar')); }
+          setTimeout(() => { shareSheet.hidden = true; }, 900); return;
+        }
+        shareSheet.hidden = true; return;
+      }
+      if (e.target === shareSheet || e.target.closest('.wa-close')) shareSheet.hidden = true;
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') shareSheet.hidden = true; });
+  }
 
   // favoritos e comparação (guardados só neste aparelho)
   const store = {

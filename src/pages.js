@@ -218,7 +218,7 @@ function vehicle(ctx, v, similar) {
     <button class="gzoom js-zoom" type="button" aria-label="Ver fotos em tela cheia"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg><span>Tela cheia</span></button>
     ${photos.length > 1 ? `<span class="gallery-count"><span class="js-gcur">1</span>/${photos.length}</span>
     <button class="gnav gprev" type="button" aria-label="Foto anterior">‹</button><button class="gnav gnext" type="button" aria-label="Próxima foto">›</button>
-    <div class="thumbs">${photos.map((src, i) => `<button type="button" data-i="${i}"${i === 0 ? ' class="on"' : ''}><img src="${src}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
+    <div class="thumbs">${photos.map((src, i) => `<button type="button" data-i="${i}"${i === 0 ? ' class="on"' : ''}><img src="${photoUrl(v, i, true)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
     ${v.is_demo && v.photos.length ? '<span class="photo-credit">Fotos de exemplo · Wikimedia Commons</span>' : ''}
   </div>
 
@@ -232,11 +232,12 @@ function vehicle(ctx, v, similar) {
     ${v.status === 'vendido' ? `<div class="sold-note">Este veículo já foi vendido. Veja opções parecidas abaixo ou fale com a gente.</div>` : ''}
     ${v.status === 'reservado' ? `<div class="sold-note res">Veículo reservado. Fale com a gente para entrar na fila de espera.</div>` : ''}
     ${wa ? `<a class="btn btn-wa btn-lg js-track" data-id="${v.id}" href="${wa}" target="_blank" rel="noopener">${icons.wa} Tenho interesse</a>` : ''}
-    ${unit && unit.phone ? `<a class="btn btn-ghost btn-lg" href="tel:${onlyDigits(unit.phone)}">${icons.phone} Ligar para a loja</a>` : ''}
+    ${unit && unit.phone ? `<a class="btn btn-ghost btn-lg" data-id="${v.id}" href="tel:${onlyDigits(unit.phone)}">${icons.phone} Ligar para a loja</a>` : ''}
     <a class="btn btn-ghost btn-lg" href="/venda-seu-carro?veiculo=${v.id}">${icons.swap} Quero dar meu carro na troca</a>
-    <div class="two-btn">
+    <div class="two-btn three-btn">
       <button type="button" class="btn btn-ghost js-fav" data-id="${v.id}" aria-pressed="false">${icons.heart}<span>Favoritar</span></button>
       <button type="button" class="btn btn-ghost js-cmp" data-id="${v.id}" aria-pressed="false">${icons.compare}<span>Comparar</span></button>
+      <button type="button" class="btn btn-ghost js-share" data-id="${v.id}" data-title="${esc(title)}" data-price="${v.price ? brl(v.price) : ''}">${icons.share}<span>Compartilhar</span></button>
     </div>
     ${unit ? `<div class="where">${icons.pin}<div><strong>Disponível na ${esc(unit.name)}</strong><span>${esc(unit.address)}${unit.neighborhood ? ` · ${esc(unit.neighborhood)}` : ''}, ${esc(unit.city)}</span></div></div>` : ''}
 
@@ -262,6 +263,16 @@ function vehicle(ctx, v, similar) {
     ${v.status === 'vendido' ? alertForm({ q: `${v.brand} ${v.model}` }) : ''}
   </div>
 </section>
+<div class="wa-sheet" id="share-sheet" hidden>
+  <div class="wa-sheet-card" role="dialog" aria-modal="true" aria-labelledby="share-title">
+    <button class="wa-close" type="button" aria-label="Fechar">×</button>
+    <h2 id="share-title">Compartilhar</h2>
+    <p>Mande este carro para alguém:</p>
+    <a class="wa-unit" data-share="whatsapp" href="#" target="_blank" rel="noopener">${icons.wa}<span><strong>WhatsApp</strong><small>Enviar para um contato ou grupo</small></span></a>
+    <a class="wa-unit share-fb" data-share="facebook" href="#" target="_blank" rel="noopener">${icons.fb}<span><strong>Facebook</strong><small>Publicar no seu perfil</small></span></a>
+    <button class="wa-unit share-copy" type="button" data-share="copiar">${icons.copy}<span><strong class="js-copy-label">Copiar link</strong><small>Para colar onde quiser</small></span></button>
+  </div>
+</div>
 <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Fotos em tela cheia">
   <div class="lb-top"><span class="lb-count"><span class="js-lbcur">1</span> / ${photos.length}</span><button class="lb-close" type="button" aria-label="Fechar">×</button></div>
   <div class="lb-track">${photos.map((src, i) => `<figure><img src="${src}" alt="${esc(title)}, foto ${i + 1}" loading="lazy"></figure>`).join('')}</div>
@@ -336,7 +347,7 @@ function compare(ctx, list) {
     <thead><tr><th scope="col"><span class="sr">Item</span></th>${list.map((v) => {
       const unit = ctx.unitsById[v.unit_id];
       const wa = unit && onlyDigits(unit.whatsapp).length >= 10 ? waLink(unit.whatsapp, waVehicleText(v)) : '';
-      return `<th scope="col"><a href="${vehicleUrl(v)}"><img src="${photoUrl(v)}" alt="" loading="lazy"></a>
+      return `<th scope="col"><a href="${vehicleUrl(v)}"><img src="${photoUrl(v, 0, true)}" alt="" loading="lazy"></a>
       <a class="cmp-name" href="${vehicleUrl(v)}">${esc(vehicleTitle(v))}</a><small>${esc(v.version)}</small>
       ${wa ? `<a class="btn btn-wa js-track" data-id="${v.id}" href="${wa}" target="_blank" rel="noopener">${icons.wa} Tenho interesse</a>` : ''}
       <button type="button" class="link js-cmp-remove" data-id="${v.id}">Remover</button></th>`;
@@ -382,4 +393,19 @@ function notFound(ctx) {
   return layout({ title: 'Página não encontrada', body, ctx });
 }
 
-module.exports = { home, stock, vehicle, sell, stores, notFound, favorites, compare, privacy };
+/** Página mostrada a qualquer visitante quando o site está suspenso (HTTP 503). Texto neutro, sem falar de cobrança. */
+function suspended(ctx, showContacts) {
+  const units = showContacts ? ctx.units.filter((u) => onlyDigits(u.whatsapp).length >= 10 || u.phone) : [];
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>Site temporariamente indisponível</title><link rel="icon" href="/static/img/favicon.png">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#0f1a2e;background:#f1f3f7;padding:20px;box-sizing:border-box}
+.c{background:#fff;border-radius:16px;padding:32px 28px;max-width:460px;width:100%;text-align:center;box-shadow:0 10px 40px rgba(16,30,60,.08)}
+.c img{max-width:200px;height:auto}h1{font-size:22px;margin:18px 0 8px;color:${BRAND.colors.dark}}p{margin:0 0 18px;color:#5b6880}
+.u{display:grid;gap:10px;text-align:left}.u div{border:1.5px solid #e2e7f0;border-radius:12px;padding:12px 14px}.u b{display:block}.u a{display:inline-block;margin:6px 12px 0 0;color:#137a3d;font-weight:600;text-decoration:none}.u a.t{color:${BRAND.colors.primary}}</style></head>
+<body><main class="c"><img src="/static/img/logo-400.png" alt="${esc(BRAND.name)}" width="200">
+<h1>Site temporariamente indisponível</h1><p>Estamos fazendo ajustes e voltamos em breve.${units.length ? ' Enquanto isso, fale com a gente:' : ''}</p>
+${units.length ? `<div class="u">${units.map((u) => `<div><b>${esc(u.name)}</b>${esc(u.neighborhood || u.address || '')}<br>${onlyDigits(u.whatsapp).length >= 10 ? `<a href="https://wa.me/${onlyDigits(u.whatsapp)}" rel="noopener">WhatsApp</a>` : ''}${u.phone ? `<a class="t" href="tel:${onlyDigits(u.phone)}">${esc(u.phone)}</a>` : ''}</div>`).join('')}</div>` : ''}
+</main></body></html>`;
+}
+
+module.exports = { home, stock, vehicle, sell, stores, notFound, favorites, compare, privacy, suspended };

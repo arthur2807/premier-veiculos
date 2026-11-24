@@ -31,13 +31,54 @@ Feito só com Node.js (22.13 ou mais novo), sem dependências externas. O banco 
 - **Usuários**: o gerente cria acessos para os vendedores. Vendedor cadastra carros e atende contatos; gerente também altera lojas, configurações, usuários e baixa backup.
 - **Marca d'água** opcional com a logo nas fotos novas.
 - **Baixar backup**: arquivo `.tar.gz` com o banco e as fotos.
-- **Painel de suporte** (`/suporte`): para o desenvolvedor do sistema. Só existe se a variável `VENDOR_PASSWORD` estiver definida, não tem link em lugar nenhum e não mostra dados pessoais (nomes e telefones). Exibe a saúde do sistema, as estatísticas, o uso do painel pela loja e os erros do servidor.
+- **Painel de suporte** (`/suporte`): para o desenvolvedor do sistema. Entra com usuário e senha (`VENDOR_USER` e `VENDOR_PASSWORD`); só existe se `VENDOR_PASSWORD` estiver definida, não tem link em lugar nenhum e não mostra dados pessoais (nomes e telefones). Exibe a saúde do sistema, as estatísticas, o uso do painel pela loja e os erros do servidor.
+
+### Desempenho dos anúncios (aba "Desempenho" no painel)
+
+Por carro e por período (7, 30, 90 dias ou 12 meses): visitas, pessoas diferentes, compartilhamentos, cliques no WhatsApp, ligações, formulários, total de contatos e conversão, além do total de visitantes do site. Tem ordenação por coluna, busca, alertas automáticos (anúncio sem visita, muita visita e pouco contato, sem foto), planilha CSV e, ao clicar no carro, gráficos por dia, de onde vieram as pessoas e como compartilharam.
+
+O botão **Compartilhar** na página do carro usa o menu do celular ou abre WhatsApp, Facebook e "copiar link". Os links compartilhados levam `?utm_source=compartilhado`, e as visitas que chegam por eles aparecem como "Link compartilhado".
+
+### Perfis de acesso
+
+| Perfil | Pode |
+|---|---|
+| Gerente | tudo (estoque, excluir, contatos, desempenho, relatórios, lojas, usuários, configurações, backup) |
+| Vendedor | cadastrar/editar carros, contatos, desempenho (não exclui) |
+| Marketing | ver estoque, desempenho e relatórios (sem dados de clientes, não altera nada) |
+| Atendimento | ver estoque e atender contatos |
+
+As permissões são conferidas no servidor (`src/roles.js`).
+
+### Painel do proprietário (`/suporte`)
+
+Saúde do sistema, requisições, tempo de resposta, erros e reinícios por dia (guardados no banco), funil do site, resultados para a loja (estoque, vendidos, tempo médio até vender, formulários), anúncios mais vistos e uso do painel por perfil e por pessoa. Entra com usuário (`VENDOR_USER`, padrão `suporte`) e senha (`VENDOR_PASSWORD`). Pelo `/suporte` também dá para criar usuários do painel da loja, trocar o perfil, redefinir a senha e desativar/reativar acessos (fica registrado na atividade como "suporte").
+
+### Cobrança do site (no `/suporte`)
+
+Três situações, trocadas com um clique pelo proprietário do software:
+
+- **Normal**: tudo funcionando.
+- **Aviso de atraso**: o site continua no ar e o painel da loja mostra uma faixa vermelha com a mensagem. Com uma data limite, o site é suspenso sozinho quando ela passa.
+- **Suspenso**: o site público responde "temporariamente indisponível" (HTTP 503, sem menção a pagamento, com o WhatsApp e o telefone das lojas se você quiser) e o painel da loja fica bloqueado. A loja ainda entra para baixar o backup. Nada é apagado; voltar para "Normal" reativa tudo.
+
+As mudanças ficam no registro de atividade como "suporte".
+
+### Segurança
+
+- Logins do painel ficam em sessões no banco: **Sair** encerra a sessão de verdade, e trocar a senha ou desativar um usuário o desconecta de todos os aparelhos. Se `ADMIN_PASSWORD` mudar, as sessões do "admin" caem no próximo deploy.
+- O limite de tentativas de login e de envio de formulários usa o IP real do visitante (o último valor do `X-Forwarded-For`, que é o que o Railway coloca).
+- Formulário de contato: até 5 envios a cada 10 minutos por IP. Cliques no WhatsApp contam 1 vez por carro a cada 30 minutos por IP.
+
+### Miniaturas
+
+Cada foto enviada ganha uma versão de ~560px (WebP) usada nos cards do estoque, servida em `/thumb/<arquivo>`. Se a miniatura não existir, o endereço entrega a foto original. Para fotos antigas, use **Configurações → Gerar miniaturas das fotos antigas** no painel.
 
 ## Rodar no computador
 
 ```bash
 npm start
-# abre em http://localhost:3000 e o painel em http://localhost:3000/admin (senha padrão: admin123)
+# abre em http://localhost:3000 e o painel em http://localhost:3000/admin (usuário `admin`, senha padrão `admin123`)
 ```
 
 Na primeira vez, o banco é criado com duas lojas e 14 veículos de exemplo. No painel há um botão para **apagar os exemplos**.
@@ -46,8 +87,10 @@ Na primeira vez, o banco é criado com duas lojas e 14 veículos de exemplo. No 
 
 | Variável | Para que serve |
 |---|---|
-| `ADMIN_PASSWORD` | Senha do painel (**obrigatória em produção**) |
-| `SESSION_SECRET` | Texto aleatório longo para assinar o login |
+| `ADMIN_USER` | Usuário do acesso principal do painel (padrão: `admin`) |
+| `VENDOR_USER` | Usuário do painel de suporte `/suporte` (padrão: `suporte`) |
+| `ADMIN_PASSWORD` | Senha do acesso "admin" (**obrigatória em produção**, 8+ caracteres; sem ela o login "admin" fica bloqueado no Railway) |
+| `SESSION_SECRET` | Opcional. Texto aleatório para assinar o login do `/suporte` (se faltar, um valor aleatório é gerado e guardado no banco) |
 | `DATA_DIR` | Pasta do banco e das fotos (no Railway: `/data`) |
 | `PORT` | Definida automaticamente pelo Railway |
 | `SEED_DEMO` | `false` para não criar veículos de exemplo |

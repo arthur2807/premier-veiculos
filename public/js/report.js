@@ -81,14 +81,18 @@
         ${d.series.slice().reverse().map((s) => `<tr><td>${dayLabel(s.day, true)}</td><td class="r">${num(s.visitors)}</td><td class="r">${num(s.pageviews)}</td><td class="r">${num(s.whatsapp)}</td><td class="r">${num(s.leads)}</td></tr>`).join('')}
       </tbody></table></div></details>`;
 
-    // dicas ao passar o mouse/dedo
+    bindTips(el, d.series, [['Visitantes', 'visitors'], ['WhatsApp', 'whatsapp'], ['Formulários', 'leads']]);
+  }
+
+  // dicas ao passar o mouse/dedo. fields = [[rótulo, chave], ...]
+  function bindTips(el, series, fields) {
     el.querySelectorAll('.rp-chart').forEach((fig) => {
       const tip = fig.querySelector('.rp-tip'), plot = fig.querySelector('.rp-plot');
       const show = (g) => {
         fig.querySelectorAll('.rp-bar.on').forEach((x) => x.classList.remove('on'));
         g.classList.add('on');
-        const s = d.series[+g.dataset.i];
-        tip.innerHTML = `<b>${dayLabel(s.day, true)}</b><span>Visitantes <b>${num(s.visitors)}</b></span><span>WhatsApp <b>${num(s.whatsapp)}</b></span><span>Formulários <b>${num(s.leads)}</b></span>`;
+        const s = series[+g.dataset.i];
+        tip.innerHTML = `<b>${dayLabel(s.day, true)}</b>${fields.map(([l, k]) => `<span>${esc(l)} <b>${num(s[k])}</b></span>`).join('')}`;
         tip.hidden = false;
         const pr = plot.getBoundingClientRect(), br = g.getBoundingClientRect();
         let left = br.left - pr.left + br.width / 2 - tip.offsetWidth / 2;
@@ -100,5 +104,5 @@
     });
   }
 
-  window.SSReport = { render };
+  window.SSReport = { render, bars, hbars, bindTips, dayLabel };
 })();

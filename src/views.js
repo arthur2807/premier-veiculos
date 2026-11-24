@@ -11,8 +11,9 @@ function vehicleUrl(v) {
   return `/veiculo/${v.id}-${slugify(`${v.brand} ${v.model} ${v.version} ${v.year_model}`)}`;
 }
 function vehicleTitle(v) { return `${v.brand} ${v.model}`; }
-function photoUrl(v, i = 0) {
-  return v.photos && v.photos[i] ? `/uploads/${v.photos[i]}` : `/placeholder/${v.id}.svg`;
+/** URL da foto i. Com small=true usa a miniatura (/thumb/), que cai na foto original se ainda não existir. */
+function photoUrl(v, i = 0, small = false) {
+  return v.photos && v.photos[i] ? `/${small ? 'thumb' : 'uploads'}/${v.photos[i]}` : `/placeholder/${v.id}.svg`;
 }
 function waLink(number, text) {
   const n = onlyDigits(number);
@@ -35,6 +36,9 @@ const icons = {
   insta: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>',
   heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.3C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.1 4.3 2.4h2c.7-1.3 2.2-2.4 4.3-2.4 3.7 0 5.8 3.8 4.3 7.2C19.5 16.4 12 21 12 21z"/></svg>',
   compare: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 3h2v18h-2v-2H4V5h6zm-4 4v10h4V7zm8-2h6v14h-6v-2h4V7h-4z"/></svg>',
+  share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18 16.1c-.8 0-1.4.3-2 .8l-7.1-4.2c.1-.2.1-.5.1-.7s0-.5-.1-.7L16 7.2c.5.5 1.2.8 2 .8a3 3 0 1 0-3-3c0 .2 0 .5.1.7L8 9.8A3 3 0 1 0 8 14.2l7.1 4.2c-.1.2-.1.4-.1.6a2.9 2.9 0 1 0 3-2.9z"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11z"/></svg>',
+  fb: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 8V6.2c0-.8.2-1.2 1.4-1.2H17V2h-2.6C11.5 2 10.5 3.4 10.5 5.8V8H8v3h2.5v11h3.6V11h2.6l.4-3z"/></svg>',
   menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>'
 };
 
@@ -69,7 +73,7 @@ ${ogImage && site ? `<meta property="og:image" content="${esc(site + ogImage)}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:ital,wght@0,600;0,700;0,800;1,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/style.css?v=6">
+<link rel="stylesheet" href="/static/css/style.css?v=7">
 <link rel="stylesheet" href="/theme.css?v=1">
 ${head}
 </head>
@@ -120,7 +124,7 @@ ${body}
 </div>
 <div class="cmp-bar" id="cmp-bar" hidden><span><strong class="js-cmp-n">0</strong> carro(s) para comparar</span><button type="button" class="link js-cmp-clear">Limpar</button><a class="btn btn-red" href="/comparar">Comparar</a></div>
 ${settings.ga_id && /^G-[A-Z0-9]{4,}$/.test(settings.ga_id) ? `<div class="consent" id="consent" hidden data-ga="${esc(settings.ga_id)}"><p>Usamos cookies de estatística (Google Analytics) para melhorar o site. <a href="/privacidade">Saiba mais</a></p><div><button type="button" class="btn btn-ghost js-consent" data-v="0">Recusar</button><button type="button" class="btn btn-blue js-consent" data-v="1">Aceitar</button></div></div>` : ''}
-<script src="/static/js/site.js?v=4" defer></script>
+<script src="/static/js/site.js?v=5" defer></script>
 </body>
 </html>`;
 }
@@ -137,7 +141,7 @@ function card(v, unitsById) {
   const unit = unitsById[v.unit_id];
   return `<article class="card" data-id="${v.id}">
   <a href="${vehicleUrl(v)}" class="card-img">
-    <img src="${photoUrl(v)}" alt="${esc(`${v.brand} ${v.model} ${v.version} ${v.year_model}`)}" loading="lazy" width="640" height="440">
+    <img src="${photoUrl(v, 0, true)}" alt="${esc(`${v.brand} ${v.model} ${v.version} ${v.year_model}`)}" loading="lazy" width="640" height="440">
     ${badge(v)}
   </a>
   <div class="card-tools">

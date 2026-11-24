@@ -306,6 +306,9 @@ legend{font:700 18px var(--head);color:var(--navy);text-transform:uppercase;padd
 .fav-count{position:absolute;top:2px;right:0;background:var(--red);color:#fff;font:700 11px/1 var(--body);min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
 .two-btn{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .two-btn .btn{padding:11px 10px}
+.three-btn{grid-template-columns:1fr 1fr 1fr}
+.three-btn .btn{font-size:14px;gap:6px}
+.share-fb svg{color:#1877f2}.share-copy{font:inherit;background:#fff;cursor:pointer;text-align:left;width:100%}.share-copy svg{color:var(--navy)}
 .btn.js-fav.on{color:var(--red);border-color:#f2c4c0;background:#fff6f5}
 .btn.js-cmp.on{color:#fff;background:var(--navy);border-color:var(--navy)}
 .cmp-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:48;background:var(--ink);color:#fff;border-radius:14px;padding:10px 10px 10px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 12px 30px rgba(0,0,0,.3);font-size:15px;max-width:calc(100vw - 110px)}

@@ -8,6 +8,8 @@ const auth = require('./auth');
 const stats = require('./analytics');
 const system = require('./system');
 const pages = require('./pages');
+const roles = require('./roles');
+const billing = require('./billing');
 const { esc, vehicleUrl } = require('./views');
 
 const BRAND = require('./brand');
@@ -67,6 +69,38 @@ function placeholderSvg(v) {
 ${LOGO_B64 ? `<image href="data:image/png;base64,${LOGO_B64}" x="170" y="96" width="300" height="121"/>` : ''}
 <text x="320" y="262" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="${BRAND.colors.dark}" letter-spacing="1">FOTOS EM BREVE</text>
 ${label ? `<text x="320" y="296" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" fill="#5b6880">${label}</text>` : ''}</svg>`;
+}
+
+// ---------- fotos e miniaturas ----------
+const PHOTO_RE = /^[a-f0-9]{24}\.(jpg|png|webp)$/;
+const THUMB_DIR = path.join(UPLOAD_DIR, 'thumbs');
+fs.mkdirSync(THUMB_DIR, { recursive: true });
+/** Decodifica um data URL de imagem e confere a assinatura do arquivo. */
+function decodeImage(data, allowed = ['jpeg', 'png', 'webp']) {
+  const mt = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(data || ''));
+  if (!mt || !allowed.includes(mt[1])) return null;
+  const buf = Buffer.from(mt[2], 'base64');
+  const sig = buf.subarray(0, 4).toString('hex');
+  const ok = (mt[1] === 'jpeg' && sig.startsWith('ffd8')) || (mt[1] === 'png' && sig === '89504e47') || (mt[1] === 'webp' && buf.subarray(8, 12).toString() === 'WEBP');
+  return ok ? { buf, ext: mt[1] === 'jpeg' ? 'jpg' : mt[1] } : null;
+}
+const baseName = (f) => f.slice(0, 24);
+/** Caminho da miniatura de uma foto, se existir. */
+function thumbPath(f) {
+  for (const ext of ['webp', 'jpg']) { const t = path.join(THUMB_DIR, `${baseName(f)}.${ext}`); if (fs.existsSync(t)) return t; }
+  return null;
+}
+function saveThumb(file, data) {
+  const img = decodeImage(data, ['webp', 'jpeg']);
+  if (!img || img.buf.length > 600e3) return false;
+  for (const ext of ['webp', 'jpg']) fs.rmSync(path.join(THUMB_DIR, `${baseName(file)}.${ext}`), { force: true });
+  fs.writeFileSync(path.join(THUMB_DIR, `${baseName(file)}.${img.ext}`), img.buf);
+  return true;
+}
+function removePhoto(f) {
+  if (!PHOTO_RE.test(f)) return;
+  fs.rm(path.join(UPLOAD_DIR, f), () => {});
+  for (const ext of ['webp', 'jpg']) fs.rm(path.join(THUMB_DIR, `${baseName(f)}.${ext}`), () => {});
 }
 
 // ---------- estoque ----------
@@ -142,33 +176,44 @@ async function adminApi(req, res, url) {
     const rl = auth.rateLimited(req, 'admin');
     if (rl.blocked) return json(res, 429, { error: 'Muitas tentativas. Aguarde 15 minutos.' });
     const b = await readBody(req, 10e3);
+    if (!String(b.username || '').trim() || !b.password) return json(res, 400, { error: 'Informe o usuário e a senha.' });
+    const asAdmin = String(b.username).trim().toLowerCase() === auth.ADMIN_USERNAME;
+    if (asAdmin && auth.adminLoginBlocked) return json(res, 503, { error: 'O acesso principal está bloqueado: defina a variável ADMIN_PASSWORD (8+ caracteres) no servidor. Os outros usuários continuam entrando normalmente.' });
     const u = auth.login(b.username, b.password);
     if (!u) { rl.fail(); return json(res, 401, { error: 'Usuário ou senha incorretos' }); }
     rl.ok();
     stats.audit(u.username, 'login');
-    res.setHeader('Set-Cookie', auth.cookieHeader(req, 'ss_admin', auth.makeAdminToken(u.id), 14 * 86400));
+    res.setHeader('Set-Cookie', auth.cookieHeader(req, 'ss_admin', auth.createSession(u.id), 14 * 86400));
     return json(res, 200, { ok: true });
   }
-  if (p === '/logout' && m === 'POST') { res.setHeader('Set-Cookie', 'ss_admin=; Path=/; Max-Age=0'); return json(res, 200, { ok: true }); }
+  if (p === '/logout' && m === 'POST') { auth.destroySession(req); res.setHeader('Set-Cookie', auth.cookieHeader(req, 'ss_admin', '', 0)); return json(res, 200, { ok: true }); }
   const user = auth.currentUser(req);
   if (!user) return json(res, 401, { error: 'Não autorizado' });
-  const manager = user.role === 'gerente';
-  const onlyManager = () => json(res, 403, { error: 'Apenas o gerente pode fazer isso.' });
-  if (p === '/me') return json(res, 200, { ok: true, user, store: BRAND.name, defaultPassword: auth.defaultPassword && manager });
+  user.role = roles.roleOf(user.role);
+  const can = (perm) => roles.can(user, perm);
+  // Responde 403 e retorna true quando o perfil não tem a permissão
+  const need = (perm) => { if (can(perm)) return false; json(res, 403, { error: `O perfil ${roles.ROLES[user.role].label} não tem acesso a isso.` }); return true; };
+  const bill = billing.state();
+  const billInfo = bill.effective === 'ok' ? { status: 'ok' } : { status: bill.effective, text: bill.text, deadline: bill.effective === 'aviso' ? bill.deadline : '' };
+  if (p === '/me') return json(res, 200, { ok: true, user, store: BRAND.name, perms: roles.permsOf(user), roles: roles.ROLES, permissions: roles.PERMISSIONS, defaultPassword: auth.defaultPassword && can('config'), billing: billInfo });
+  // suspenso: o painel só deixa sair e baixar o backup (os dados continuam sendo da loja)
+  if (bill.effective === 'suspenso' && p !== '/backup') return json(res, 423, { error: bill.text, suspended: true });
 
   // veículos
-  if (p === '/vehicles' && m === 'GET') return json(res, 200, all('SELECT * FROM vehicles ORDER BY (status=\'vendido\'), id DESC'));
+  if (p === '/vehicles' && m === 'GET') return need('estoque') || json(res, 200, all('SELECT * FROM vehicles ORDER BY (status=\'vendido\'), id DESC'));
   if (p === '/vehicles' && m === 'POST') {
+    if (need('estoque_editar')) return;
     const v = cleanVehicle(await readBody(req));
     if (!v.brand || !v.model) return json(res, 400, { error: 'Marca e modelo são obrigatórios' });
     const keys = Object.keys(v);
     const r = db.prepare(`INSERT INTO vehicles(${keys.join(',')}) VALUES(${keys.map(() => '?').join(',')})`).run(...keys.map((k) => v[k]));
     const saved = one('SELECT * FROM vehicles WHERE id=?', r.lastInsertRowid);
     stats.audit(user.username, 'veiculo_criado', vName(saved));
-    return json(res, 201, { ...saved, matches: alertMatches(saved) });
+    return json(res, 201, { ...saved, matches: can('contatos') ? alertMatches(saved) : [] });
   }
   let mm = p.match(/^\/vehicles\/(\d+)$/);
   if (mm && m === 'PUT') {
+    if (need('estoque_editar')) return;
     const before = one('SELECT * FROM vehicles WHERE id=?', +mm[1]);
     const v = cleanVehicle(await readBody(req)); const keys = Object.keys(v);
     if (keys.length) db.prepare(`UPDATE vehicles SET ${keys.map((k) => k + '=?').join(',')}, updated_at=datetime('now') WHERE id=?`).run(...keys.map((k) => v[k]), +mm[1]);
@@ -176,40 +221,52 @@ async function adminApi(req, res, url) {
     if (before && saved && before.status !== saved.status) stats.audit(user.username, 'veiculo_' + saved.status, vName(saved));
     else stats.audit(user.username, 'veiculo_editado', vName(saved));
     const reopened = before && (before.status === 'vendido') !== (saved.status === 'vendido');
-    return json(res, 200, { ...saved, matches: reopened || (before && before.price !== saved.price) ? alertMatches(saved) : [] });
+    return json(res, 200, { ...saved, matches: can('contatos') && (reopened || (before && before.price !== saved.price)) ? alertMatches(saved) : [] });
   }
   if (mm && m === 'DELETE') {
+    if (need('estoque_excluir')) return;
     const v = one('SELECT * FROM vehicles WHERE id=?', +mm[1]);
-    if (v) { for (const f of v.photos) fs.rm(path.join(UPLOAD_DIR, f), () => {}); db.prepare('DELETE FROM vehicles WHERE id=?').run(v.id); stats.audit(user.username, 'veiculo_excluido', vName(v)); }
+    if (v) { for (const f of v.photos) removePhoto(f); db.prepare('DELETE FROM vehicles WHERE id=?').run(v.id); stats.audit(user.username, 'veiculo_excluido', vName(v)); }
     return json(res, 200, { ok: true });
   }
   mm = p.match(/^\/vehicles\/(\d+)\/matches$/);
-  if (mm) return json(res, 200, alertMatches(one('SELECT * FROM vehicles WHERE id=?', +mm[1])));
+  if (mm) return need('contatos') || json(res, 200, alertMatches(one('SELECT * FROM vehicles WHERE id=?', +mm[1])));
   if (p === '/demo' && m === 'DELETE') {
-    if (!manager) return onlyManager();
-    for (const v of all('SELECT * FROM vehicles WHERE is_demo=1')) for (const f of v.photos) fs.rm(path.join(UPLOAD_DIR, f), () => {});
+    if (need('estoque_excluir')) return;
+    for (const v of all('SELECT * FROM vehicles WHERE is_demo=1')) for (const f of v.photos) removePhoto(f);
     const r = db.prepare('DELETE FROM vehicles WHERE is_demo=1').run();
     stats.audit(user.username, 'exemplos_apagados', `${r.changes} veículos`);
     return json(res, 200, { removed: Number(r.changes) });
   }
   if (p === '/upload' && m === 'POST') {
+    if (need('estoque_editar')) return;
     const b = await readBody(req);
-    const mt = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(b.data || ''));
-    if (!mt) return json(res, 400, { error: 'Imagem inválida' });
-    const buf = Buffer.from(mt[2], 'base64');
-    const sig = buf.subarray(0, 4).toString('hex');
-    const ok = (mt[1] === 'jpeg' && sig.startsWith('ffd8')) || (mt[1] === 'png' && sig === '89504e47') || (mt[1] === 'webp' && buf.subarray(8, 12).toString() === 'WEBP');
-    if (!ok) return json(res, 400, { error: 'Formato não reconhecido' });
-    const name = crypto.randomBytes(12).toString('hex') + '.' + (mt[1] === 'jpeg' ? 'jpg' : mt[1]);
-    fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
+    const img = decodeImage(b.data);
+    if (!img) return json(res, 400, { error: 'Imagem inválida ou formato não reconhecido' });
+    const name = crypto.randomBytes(12).toString('hex') + '.' + img.ext;
+    fs.writeFileSync(path.join(UPLOAD_DIR, name), img.buf);
+    if (b.thumb) saveThumb(name, b.thumb);
     return json(res, 201, { file: name });
+  }
+  // miniaturas das fotos antigas (geradas no navegador do gerente)
+  if (p === '/thumbs/missing' && m === 'GET') {
+    if (need('estoque_editar')) return;
+    const used = new Set(all('SELECT photos FROM vehicles').flatMap((v) => v.photos));
+    return json(res, 200, [...used].filter((f) => !thumbPath(f)));
+  }
+  if (p === '/thumbs' && m === 'POST') {
+    if (need('estoque_editar')) return;
+    const b = await readBody(req, 2e6);
+    if (!PHOTO_RE.test(String(b.file || '')) || !fs.existsSync(path.join(UPLOAD_DIR, b.file))) return json(res, 400, { error: 'Foto não encontrada' });
+    if (!saveThumb(b.file, b.thumb)) return json(res, 400, { error: 'Miniatura inválida' });
+    return json(res, 201, { ok: true });
   }
 
   // lojas e configurações
   if (p === '/units' && m === 'GET') return json(res, 200, db.prepare('SELECT * FROM units ORDER BY sort, id').all());
   mm = p.match(/^\/units\/(\d+)$/);
   if (mm && m === 'PUT') {
-    if (!manager) return onlyManager();
+    if (need('lojas')) return;
     const b = await readBody(req); const f = ['name', 'address', 'neighborhood', 'city', 'phone', 'whatsapp', 'hours'];
     if (b.hours_json != null) {
       const sched = parseSchedule(b.hours_json);
@@ -221,7 +278,7 @@ async function adminApi(req, res, url) {
     return json(res, 200, db.prepare('SELECT * FROM units WHERE id=?').get(+mm[1]));
   }
   if (p === '/units' && m === 'POST') {
-    if (!manager) return onlyManager();
+    if (need('lojas')) return;
     const sort = (db.prepare('SELECT MAX(sort) s FROM units').get().s || 0) + 1;
     const def = JSON.stringify([...Array(5)].map(() => ({ open: '08:00', close: '18:00' })).concat([{ open: '08:00', close: '12:00' }, null]));
     const r = db.prepare("INSERT INTO units(name, address, neighborhood, city, phone, whatsapp, hours, hours_json, sort) VALUES(?, '', '', '', '', '', ?, ?, ?)").run(`Loja ${sort}`, hoursText(parseSchedule(def)), def, sort);
@@ -229,7 +286,7 @@ async function adminApi(req, res, url) {
     return json(res, 201, db.prepare('SELECT * FROM units WHERE id=?').get(r.lastInsertRowid));
   }
   if (mm && m === 'DELETE') {
-    if (!manager) return onlyManager();
+    if (need('lojas')) return;
     if (db.prepare('SELECT COUNT(*) c FROM units').get().c <= 1) return json(res, 400, { error: 'O site precisa ter pelo menos uma loja.' });
     const other = db.prepare('SELECT id FROM units WHERE id!=? ORDER BY sort LIMIT 1').get(+mm[1]);
     db.prepare('UPDATE vehicles SET unit_id=? WHERE unit_id=?').run(other.id, +mm[1]);
@@ -238,9 +295,10 @@ async function adminApi(req, res, url) {
     return json(res, 200, { ok: true });
   }
   if (p === '/settings' && m === 'GET') return json(res, 200, getSettings());
-  if (p === '/settings' && m === 'PUT') { if (!manager) return onlyManager(); saveSettings(await readBody(req)); stats.audit(user.username, 'configuracoes'); return json(res, 200, getSettings()); }
+  if (p === '/settings' && m === 'PUT') { if (need('config')) return; saveSettings(await readBody(req)); stats.audit(user.username, 'configuracoes'); return json(res, 200, getSettings()); }
 
   // contatos
+  if (p.startsWith('/leads') && need('contatos')) return;
   if (p === '/leads' && m === 'GET') {
     const leads = db.prepare('SELECT l.*, v.brand, v.model, v.year_model FROM leads l LEFT JOIN vehicles v ON v.id=l.vehicle_id ORDER BY l.id DESC LIMIT 500').all();
     const stock = all("SELECT * FROM vehicles WHERE status!='vendido'");
@@ -263,40 +321,58 @@ async function adminApi(req, res, url) {
       demo: g('SELECT COUNT(*) c FROM vehicles WHERE is_demo=1')
     });
   }
-  if (p === '/report') return json(res, 200, stats.report(+url.searchParams.get('dias') || 30));
+  if (p === '/report') return need('relatorios') || json(res, 200, stats.report(+url.searchParams.get('dias') || 30));
 
-  // usuários (gerente)
+  // desempenho dos anúncios
+  if (p === '/vehicle-stats') return need('desempenho') || json(res, 200, stats.vehicleReport(+url.searchParams.get('dias') || 30));
+  mm = p.match(/^\/vehicle-stats\/(\d+)$/);
+  if (mm) return need('desempenho') || json(res, 200, stats.vehicleDetail(+mm[1], +url.searchParams.get('dias') || 30));
+
+  // usuários
   if (p.startsWith('/users')) {
-    if (!manager) return onlyManager();
-    if (p === '/users' && m === 'GET') return json(res, 200, db.prepare('SELECT id, name, username, role, active, last_login, created_at FROM users ORDER BY active DESC, name').all());
-    if (p === '/users' && m === 'POST') {
-      const b = await readBody(req, 10e3);
-      const username = norm(b.username).replace(/[^a-z0-9._-]/g, '');
-      if (!String(b.name || '').trim() || username.length < 3 || username === 'admin') return json(res, 400, { error: 'Informe nome e um usuário com pelo menos 3 letras (sem espaços).' });
-      if (String(b.password || '').length < 6) return json(res, 400, { error: 'A senha precisa ter pelo menos 6 caracteres.' });
-      if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) return json(res, 400, { error: 'Esse usuário já existe.' });
-      db.prepare('INSERT INTO users(name, username, pass_hash, role) VALUES(?,?,?,?)').run(String(b.name).trim().slice(0, 80), username, auth.hashPassword(b.password), b.role === 'gerente' ? 'gerente' : 'vendedor');
-      stats.audit(user.username, 'usuario_criado', username);
-      return json(res, 201, { ok: true });
-    }
-    mm = p.match(/^\/users\/(\d+)$/);
-    if (mm && m === 'PUT') {
-      const b = await readBody(req, 10e3); const id = +mm[1];
-      if ('active' in b) db.prepare('UPDATE users SET active=? WHERE id=?').run(b.active ? 1 : 0, id);
-      if (b.role) db.prepare('UPDATE users SET role=? WHERE id=?').run(b.role === 'gerente' ? 'gerente' : 'vendedor', id);
-      if (b.password) {
-        if (String(b.password).length < 6) return json(res, 400, { error: 'A senha precisa ter pelo menos 6 caracteres.' });
-        db.prepare('UPDATE users SET pass_hash=? WHERE id=?').run(auth.hashPassword(b.password), id);
-      }
-      stats.audit(user.username, 'usuario_editado', `#${id}`);
-      return json(res, 200, { ok: true });
-    }
-    return json(res, 404, { error: 'Rota não encontrada' });
+    if (need('usuarios')) return;
+    return usersApi(req, res, p, m, user.username);
   }
   if (p === '/backup' && m === 'GET') {
-    if (!manager) return onlyManager();
+    if (need('backup')) return;
     stats.audit(user.username, 'backup_baixado');
     return require('./backup').streamBackup(res);
+  }
+  return json(res, 404, { error: 'Rota não encontrada' });
+}
+
+// ---------- usuários da loja (usado pelo painel da loja e pelo /suporte) ----------
+/** Rotas /users: listar, criar e editar (perfil, senha, ativo). `actor` vai para o registro de atividade. */
+async function usersApi(req, res, p, m, actor) {
+  if (p === '/users' && m === 'GET') return json(res, 200, db.prepare('SELECT id, name, username, role, active, last_login, created_at FROM users ORDER BY active DESC, name').all());
+  if (p === '/users' && m === 'POST') {
+    const b = await readBody(req, 10e3);
+    const username = norm(b.username).replace(/[^a-z0-9._-]/g, '');
+    if (!String(b.name || '').trim() || username.length < 3) return json(res, 400, { error: 'Informe nome e um usuário com pelo menos 3 letras (sem espaços).' });
+    if (username === auth.ADMIN_USERNAME || username === auth.VENDOR_USERNAME) return json(res, 400, { error: 'Esse nome de usuário é reservado. Escolha outro.' });
+    const pw = String(b.password || '').trim(); // o teclado do celular costuma pôr espaço no fim
+    if (pw.length < 6) return json(res, 400, { error: 'A senha precisa ter pelo menos 6 caracteres.' });
+    if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) return json(res, 400, { error: 'Esse usuário já existe.' });
+    db.prepare('INSERT INTO users(name, username, pass_hash, role) VALUES(?,?,?,?)').run(String(b.name).trim().slice(0, 80), username, auth.hashPassword(pw), roles.roleOf(b.role));
+    stats.audit(actor, 'usuario_criado', `${username} (${roles.ROLES[roles.roleOf(b.role)].label})`);
+    return json(res, 201, { ok: true, username });
+  }
+  const mm = p.match(/^\/users\/(\d+)$/);
+  if (mm && m === 'PUT') {
+    const b = await readBody(req, 10e3); const id = +mm[1];
+    const u = db.prepare('SELECT username FROM users WHERE id=?').get(id);
+    if (!u) return json(res, 404, { error: 'Usuário não encontrado' });
+    const pw = b.password == null ? '' : String(b.password).trim();
+    if (b.password != null && b.password !== '' && pw.length < 6) return json(res, 400, { error: 'A senha precisa ter pelo menos 6 caracteres.' });
+    if ('active' in b) { db.prepare('UPDATE users SET active=? WHERE id=?').run(b.active ? 1 : 0, id); if (!b.active) auth.revokeUser(id); }
+    if (b.role) db.prepare('UPDATE users SET role=? WHERE id=?').run(roles.roleOf(b.role), id);
+    if (pw) {
+      db.prepare('UPDATE users SET pass_hash=? WHERE id=?').run(auth.hashPassword(pw), id);
+      auth.revokeUser(id); // senha trocada: desconecta esse usuário de todos os aparelhos
+    }
+    const what = [b.role ? 'perfil → ' + roles.ROLES[roles.roleOf(b.role)].label : '', pw ? 'nova senha' : '', 'active' in b ? (b.active ? 'reativado' : 'desativado') : ''].filter(Boolean).join(', ');
+    stats.audit(actor, 'usuario_editado', `${u.username}${what ? ' (' + what + ')' : ''}`);
+    return json(res, 200, { ok: true });
   }
   return json(res, 404, { error: 'Rota não encontrada' });
 }
@@ -309,14 +385,31 @@ async function vendorApi(req, res, url) {
     const rl = auth.rateLimited(req, 'vendor');
     if (rl.blocked) return json(res, 429, { error: 'Muitas tentativas. Aguarde 15 minutos.' });
     const b = await readBody(req, 10e3);
-    if (!auth.vendorLogin(b.password)) { rl.fail(); return json(res, 401, { error: 'Senha incorreta' }); }
+    if (!auth.vendorLogin(b.username, b.password)) { rl.fail(); return json(res, 401, { error: 'Usuário ou senha incorretos' }); }
     rl.ok();
     res.setHeader('Set-Cookie', auth.cookieHeader(req, 'ss_vendor', auth.makeVendorToken(), 7 * 86400));
     return json(res, 200, { ok: true });
   }
-  if (p === '/logout' && req.method === 'POST') { res.setHeader('Set-Cookie', 'ss_vendor=; Path=/; Max-Age=0'); return json(res, 200, { ok: true }); }
+  if (p === '/logout' && req.method === 'POST') { res.setHeader('Set-Cookie', auth.cookieHeader(req, 'ss_vendor', '', 0)); return json(res, 200, { ok: true }); }
   if (!auth.isVendor(req)) return json(res, 401, { error: 'Não autorizado' });
-  if (p === '/resumo') return json(res, 200, { report: stats.report(+url.searchParams.get('dias') || 30), system: system.info() });
+  if (p.startsWith('/users')) return usersApi(req, res, p, req.method, auth.VENDOR_USERNAME);
+  if (p === '/roles') return json(res, 200, { roles: roles.ROLES, permissions: roles.PERMISSIONS });
+  if (p === '/billing' && req.method === 'GET') return json(res, 200, { ...billing.state(), defaults: billing.DEFAULTS });
+  if (p === '/billing' && req.method === 'PUT') {
+    const before = billing.state().effective;
+    const s = billing.save(await readBody(req, 10e3));
+    const LABEL = { ok: 'normal', aviso: 'aviso de atraso', suspenso: 'suspenso' };
+    stats.audit(auth.VENDOR_USERNAME, 'cobranca', `${LABEL[before]} → ${LABEL[s.effective]}${s.status === 'aviso' && s.deadline ? ' (suspende após ' + s.deadline.split('-').reverse().join('/') + ')' : ''}`);
+    return json(res, 200, { ...s, defaults: billing.DEFAULTS });
+  }
+  if (p === '/resumo') {
+    const days = +url.searchParams.get('dias') || 30;
+    const vr = stats.vehicleReport(days);
+    // só números por anúncio, sem dados de clientes
+    const top = vr.vehicles.slice().sort((a, b) => b.views - a.views || b.contacts - a.contacts).slice(0, 15)
+      .map(({ id, brand, model, year_model, price, status, daysListed, views, people, shares, whatsapp, calls, forms, contacts }) => ({ id, brand, model, year_model, price, status, daysListed, views, people, shares, whatsapp, calls, forms, contacts }));
+    return json(res, 200, { site: getSettings().site_url || `https://${req.headers.host}`, report: stats.report(days), system: system.info(), usage: system.report(days), vehicles: { totals: vr.totals, site: vr.site, shareChannels: vr.shareChannels, top } });
+  }
   return json(res, 404, { error: 'Rota não encontrada' });
 }
 
@@ -326,6 +419,11 @@ async function handle(req, res) {
   let p; try { p = decodeURIComponent(url.pathname); } catch { return send(res, 400, 'Endereço inválido', 'text/plain'); }
 
   if (p.startsWith('/static/')) { if (serveFile(res, PUBLIC_DIR, p.slice(8), 'public, max-age=3600')) return; return send(res, 404, 'Não encontrado', 'text/plain'); }
+  if (p.startsWith('/thumb/')) {
+    const f = p.slice(7);
+    if (PHOTO_RE.test(f)) { const t = thumbPath(f); if (t && serveFile(res, THUMB_DIR, path.basename(t), 'public, max-age=31536000, immutable')) return; if (serveFile(res, UPLOAD_DIR, f, 'public, max-age=3600')) return; }
+    return send(res, 404, 'Não encontrado', 'text/plain');
+  }
   if (p.startsWith('/uploads/')) { if (serveFile(res, UPLOAD_DIR, p.slice(9), 'public, max-age=31536000, immutable')) return; return send(res, 404, 'Não encontrado', 'text/plain'); }
   if (p.startsWith('/api/admin')) return adminApi(req, res, url);
   if (p.startsWith('/api/suporte')) return vendorApi(req, res, url);
@@ -335,7 +433,17 @@ async function handle(req, res) {
     return serveFile(res, PUBLIC_DIR, 'suporte/index.html', 'no-store', { 'X-Robots-Tag': 'noindex, nofollow' });
   }
 
+  // site suspenso por cobrança: tudo que é público responde 503 (indisponível temporariamente)
+  if (billing.state().effective === 'suspenso') {
+    if (p === '/health') return send(res, 200, 'ok', 'text/plain');
+    if (p === '/robots.txt') return send(res, 200, 'User-agent: *\nDisallow: /admin\nDisallow: /suporte\nDisallow: /api/\n', 'text/plain');
+    if (p === '/api/evt') return json(res, 200, { ok: true });
+    if (p.startsWith('/api/')) return json(res, 503, { error: 'Site temporariamente indisponível.' });
+    return send(res, 503, pages.suspended(ctx(), billing.state().showContacts), undefined, { 'Retry-After': '86400', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+  }
+
   if (p === '/api/leads' && req.method === 'POST') {
+    if (auth.throttled(req, 'lead', 5, 10 * 60e3)) return json(res, 429, { error: 'Você já enviou vários pedidos agora há pouco. Tente de novo em alguns minutos ou fale direto pelo WhatsApp.' });
     const b = await readBody(req, 20e3);
     if (b.website) return json(res, 200, { ok: true }); // honeypot
     if (!String(b.name || '').trim() || String(b.phone || '').replace(/\D/g, '').length < 10) return json(res, 400, { error: 'Informe nome e WhatsApp com DDD.' });
@@ -349,13 +457,22 @@ async function handle(req, res) {
     const unit = db.prepare('SELECT whatsapp FROM units WHERE id=?').get(+b.unit_id || 0) || db.prepare('SELECT whatsapp FROM units ORDER BY sort LIMIT 1').get();
     return json(res, 201, { ok: true, whatsapp: unit ? unit.whatsapp.replace(/\D/g, '') : '' });
   }
-  // eventos do site (clique no WhatsApp)
+  // eventos do site: clique no WhatsApp, ligação e compartilhamento de anúncio
   if (p === '/api/evt' && req.method === 'POST') {
     const b = await readBody(req, 2e3).catch(() => ({}));
-    if (!stats.isBot(req) && !auth.currentUser(req) && b.t === 'wa') {
-      const vid = parseInt(b.v, 10);
-      stats.trackEvent('wa', vid > 0 ? vid : 'geral');
-      if (vid > 0) db.prepare('UPDATE vehicles SET contacts=contacts+1 WHERE id=?').run(vid);
+    const t = String(b.t || ''), vid = parseInt(b.v, 10) || 0;
+    const EVT = { wa: { col: 'contacts', per: 30 * 60e3 }, call: { col: 'calls', per: 30 * 60e3 }, share: { col: 'shares', per: 10 * 60e3 } };
+    const ev = EVT[t];
+    if (ev && (t !== 'share' || vid > 0) && !stats.isBot(req) && !auth.currentUser(req)
+      && !auth.throttled(req, `${t}:${vid}`, 1, ev.per) && !auth.throttled(req, 'evt', 40, 3600e3)) {
+      const exists = vid > 0 && db.prepare('SELECT 1 FROM vehicles WHERE id=?').get(vid);
+      if (t === 'share' && !exists) return json(res, 200, { ok: true });
+      stats.trackEvent(t, exists ? vid : 'geral');
+      if (exists) db.prepare(`UPDATE vehicles SET ${ev.col}=${ev.col}+1 WHERE id=?`).run(vid);
+      if (t === 'share' && exists) {
+        const ch = ['whatsapp', 'facebook', 'copiar', 'nativo'].includes(b.c) ? b.c : 'outro';
+        stats.trackEvent('vshare', `${vid}|${ch}`);
+      }
     }
     return json(res, 200, { ok: true });
   }
@@ -398,7 +515,7 @@ async function handle(req, res) {
   if (m) {
     const v = one('SELECT * FROM vehicles WHERE id=?', +m[1]);
     if (!v) return send(res, 404, pages.notFound(c));
-    if (p !== vehicleUrl(v)) { res.writeHead(301, { Location: vehicleUrl(v) }); return res.end(); }
+    if (p !== vehicleUrl(v)) { res.writeHead(301, { Location: vehicleUrl(v) + url.search }); return res.end(); } // mantém utm_source etc.
     track('Veículo', v.id);
     if (!staff && !stats.isBot(req)) db.prepare('UPDATE vehicles SET views=views+1 WHERE id=?').run(v.id);
     const similar = all(`SELECT * FROM vehicles WHERE id!=? AND status!='vendido' ORDER BY (body=?) DESC, ABS(price-?) ASC LIMIT 4`, v.id, v.body, v.price);
@@ -432,5 +549,6 @@ http.createServer((req, res) => {
 }).listen(PORT, () => {
   console.log(`${BRAND.name} rodando em http://localhost:${PORT}`);
   if (!auth.vendorEnabled()) console.log('[suporte] painel do vendedor desativado (defina VENDOR_PASSWORD com 8+ caracteres para ativar)');
+  else console.log(`[suporte] painel /suporte ativo para o usuário "${auth.VENDOR_USERNAME}"`);
   require('./demo-photos').fetchDemoPhotos().catch((e) => console.warn('[fotos-exemplo]', e.message));
 });
